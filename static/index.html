@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budget Tracker</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>Budget Tracker</h1>
+  <p class="subtitle">Know where your money goes.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Add transaction</h2>
+    <form id="txn-form">
+      <label>Date <input type="date" id="f-date" required></label>
+      <label>Description <input type="text" id="f-desc" placeholder="e.g. Costco" required maxlength="200"></label>
+      <label>Amount <input type="number" id="f-amount" step="0.01" placeholder="-45.67 (negative = spending)" required></label>
+      <label>Category
+        <select id="f-cat">
+          <option value="groceries">groceries</option>
+          <option value="dining">dining</option>
+          <option value="transport">transport</option>
+          <option value="housing">housing</option>
+          <option value="utilities">utilities</option>
+          <option value="subscriptions">subscriptions</option>
+          <option value="entertainment">entertainment</option>
+          <option value="shopping">shopping</option>
+          <option value="health">health</option>
+          <option value="travel">travel</option>
+          <option value="education">education</option>
+          <option value="income">income</option>
+          <option value="other" selected>other</option>
+        </select>
+      </label>
+      <button type="submit">Add</button>
+    </form>
+    <p id="form-error" class="error" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>This month</h2>
+    <div id="month-cards" class="cards"><p class="muted">No data yet.</p></div>
+    <h3>Spending by category</h3>
+    <div id="cat-bars"></div>
+  </section>
+
+  <section class="card">
+    <h2>Transactions</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody id="txn-rows"><tr><td colspan="5" class="muted">No transactions yet.</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
