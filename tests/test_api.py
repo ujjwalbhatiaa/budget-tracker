@@ -106,3 +106,60 @@ def test_summary_empty(client):
 def test_category_normalized_lowercase(client):
     t = _add(client, category="Groceries")
     assert t["category"] == "groceries"
+
+
+def test_update_full(client):
+    t = _add(client, description="Costco", amount=-84.2, category="groceries")
+    r = client.put(f"/api/transactions/{t['id']}", json={
+        "date": "2026-09-06", "description": "Safeway", "amount": -51.0,
+        "category": "groceries"})
+    assert r.status_code == 200, r.text
+    updated = r.json()
+    assert updated["id"] == t["id"]
+    assert updated["date"] == "2026-09-06"
+    assert updated["description"] == "Safeway"
+    assert updated["amount"] == -51.0
+
+
+def test_update_partial_keeps_other_fields(client):
+    t = _add(client, description="Costco", amount=-84.2, category="groceries")
+    r = client.put(f"/api/transactions/{t['id']}",
+                   json={"description": "Costco Wholesale"})
+    assert r.status_code == 200, r.text
+    updated = r.json()
+    assert updated["description"] == "Costco Wholesale"
+    assert updated["amount"] == -84.2  # untouched
+    assert updated["category"] == "groceries"  # untouched
+
+
+def test_update_normalizes_category_lowercase(client):
+    t = _add(client)
+    r = client.put(f"/api/transactions/{t['id']}", json={"category": "DINING"})
+    assert r.status_code == 200
+    assert r.json()["category"] == "dining"
+
+
+def test_update_missing_is_404(client):
+    assert client.put("/api/transactions/9999",
+                      json={"description": "x"}).status_code == 404
+
+
+def test_update_rejects_zero_amount(client):
+    t = _add(client)
+    r = client.put(f"/api/transactions/{t['id']}", json={"amount": 0})
+    assert r.status_code == 422
+
+
+def test_update_rejects_blank_description(client):
+    t = _add(client)
+    r = client.put(f"/api/transactions/{t['id']}",
+                   json={"description": "   "})
+    assert r.status_code == 422
+
+
+def test_update_empty_patch_is_noop(client):
+    t = _add(client, description="Costco", amount=-84.2)
+    r = client.put(f"/api/transactions/{t['id']}", json={})
+    assert r.status_code == 200
+    assert r.json()["description"] == "Costco"
+    assert r.json()["amount"] == -84.2

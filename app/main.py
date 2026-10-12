@@ -4,6 +4,7 @@ Endpoints:
     GET    /api/transactions          list (newest first, ?limit=)
     POST   /api/transactions          create
     DELETE /api/transactions/{id}     delete
+    PUT    /api/transactions/{id}     update (partial; any of date, description, amount, category)
     GET    /api/summary               per-month spending/income/net + categories
     GET    /api/categories            all-time category breakdown
 """
@@ -17,7 +18,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import get_db
-from .schemas import CategoryTotal, MonthSummary, TransactionIn, TransactionOut
+from .schemas import (CategoryTotal, MonthSummary, TransactionIn,
+                      TransactionOut, TransactionUpdate)
 
 app = FastAPI(title="Budget Tracker")
 
@@ -68,6 +70,34 @@ def delete_transaction(txn_id: int):
     db.commit()
     if cur.rowcount == 0:
         raise HTTPException(status_code=404, detail="transaction not found")
+
+
+@app.put("/api/transactions/{txn_id}", response_model=TransactionOut)
+def update_transaction(txn_id: int, patch: TransactionUpdate):
+    db = get_db(DB_PATH)
+    row = db.execute("SELECT * FROM transactions WHERE id = ?",
+                     (txn_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    updates = patch.model_dump(exclude_unset=True)
+    if updates:
+        current = dict(row)
+        new = {**current, **{k: v for k, v in updates.items() if v is not None}}
+        # Reuse the create normalization: strip + lowercase category.
+        new["description"] = str(new["description"]).strip()
+        new["category"] = str(new["category"]).strip().lower() or "other"
+        date_val = new["date"]
+        new["date"] = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
+        db.execute(
+            "UPDATE transactions SET date = ?, description = ?,"
+            " amount = ?, category = ? WHERE id = ?",
+            (new["date"], new["description"], new["amount"],
+             new["category"], txn_id),
+        )
+        db.commit()
+    row = db.execute("SELECT * FROM transactions WHERE id = ?",
+                     (txn_id,)).fetchone()
+    return _row_to_out(row)
 
 
 @app.get("/api/summary", response_model=list[MonthSummary])

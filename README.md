@@ -20,6 +20,7 @@ Open http://127.0.0.1:8000 — the UI is served by the same app.
 | `GET` | `/api/transactions?limit=100` | List transactions, newest first |
 | `POST` | `/api/transactions` | Create (`date`, `description`, `amount`, `category`) |
 | `DELETE` | `/api/transactions/{id}` | Delete one |
+| `PUT` | `/api/transactions/{id}` | Update (`date`, `description`, `amount`, `category` — all optional) |
 | `GET` | `/api/summary` | Per-month spending / income / net + category shares |
 | `GET` | `/api/categories` | All-time spending by category |
 
