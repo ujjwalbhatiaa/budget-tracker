@@ -16,12 +16,18 @@ def get_db(path: str = "budget.db") -> sqlite3.Connection:
         _db.row_factory = sqlite3.Row
         _db.execute(
             """CREATE TABLE IF NOT EXISTS transactions (
-                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                   date TEXT NOT NULL,          -- YYYY-MM-DD
-                   description TEXT NOT NULL,
-                   amount REAL NOT NULL,        -- negative = spending
-                   category TEXT NOT NULL DEFAULT 'other'
-               )"""
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL, -- YYYY-MM-DD
+            description TEXT NOT NULL,
+            amount REAL NOT NULL, -- negative = spending
+            category TEXT NOT NULL DEFAULT 'other'
+        )"""
+        )
+        _db.execute(
+            """CREATE TABLE IF NOT EXISTS budgets (
+            category TEXT PRIMARY KEY, -- normalized (lowercase, trimmed)
+            monthly_limit REAL NOT NULL -- positive spending cap
+        )"""
         )
         _db.execute(
             "CREATE INDEX IF NOT EXISTS idx_txn_date ON transactions(date)"
@@ -36,7 +42,7 @@ def reset_db(path: str = "budget.db") -> None:
     with _lock:
         if _db is not None:
             _db.close()
-            _db = None
+        _db = None
     import os
     if os.path.exists(path):
         os.remove(path)
