@@ -80,6 +80,21 @@ class BudgetOut(BaseModel):
     monthly_limit: float
 
 
+class ImportRowError(BaseModel):
+    """One rejected CSV row: the file's line number and why it failed."""
+
+    row: int
+    error: str
+
+
+class ImportResult(BaseModel):
+    """Outcome of POST /api/transactions/import."""
+
+    imported: int
+    skipped: int
+    errors: list[ImportRowError]
+
+
 class BudgetStatus(BaseModel):
     """Spend vs cap for one category in one month."""
 

@@ -11,6 +11,8 @@ Endpoints:
     GET    /api/summary/top-categories  top-N spending categories for one month (ranked, with share)
     GET    /api/categories            all-time category breakdown
     GET    /api/recurring             detected recurring transactions (subscriptions etc.)
+    GET    /api/transactions/export   download all transactions as CSV
+    POST   /api/transactions/import   upload a CSV of transactions (per-row validation)
 """
 
 from __future__ import annotations
@@ -29,9 +31,13 @@ from .schemas import (CategoryTotal, CategoryTrend, MonthSummary,
                       TopCategoriesSummary, YearMonth, YearSummary)
 
 from .budgets import router as budgets_router
+from .export import router as export_router
+from .importer import router as importer_router
 
 app = FastAPI(title="Budget Tracker")
 app.include_router(budgets_router)
+app.include_router(export_router)
+app.include_router(importer_router)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
