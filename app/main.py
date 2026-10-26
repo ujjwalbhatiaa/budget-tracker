@@ -6,6 +6,7 @@ Endpoints:
     DELETE /api/transactions/{id}     delete
     PUT    /api/transactions/{id}     update (partial; any of date, description, amount, category)
     GET    /api/summary               per-month spending/income/net + categories
+    GET    /api/summary/month/{month} one month's spending/income/net + categories
     GET    /api/summary/trend           per-month spending trend for one category
     GET    /api/summary/year            full calendar-year overview (12 month rows + totals)
     GET    /api/summary/top-categories  top-N spending categories for one month (ranked, with share)
@@ -21,7 +22,7 @@ from __future__ import annotations
 import os
 from datetime import date as date_type, timedelta
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -147,6 +148,35 @@ def monthly_summary():
                                 net=round(m["income"] - m["spending"], 2),
                                 by_category=cats))
     return out
+
+
+@app.get("/api/summary/month/{month}", response_model=MonthSummary)
+def month_summary(month: str = Path(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")):
+    """One month's spending/income/net + category breakdown (YYYY-MM).
+
+    Zero-filled with an empty category list when the month has no
+    transactions, matching the top-categories empty-month behaviour.
+    """
+    db = get_db(DB_PATH)
+    rows = db.execute(
+        "SELECT category,"
+        "       SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS spending,"
+        "       SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income"
+        " FROM transactions WHERE substr(date, 1, 7) = ?"
+        " GROUP BY category",
+        (month,),
+    ).fetchall()
+    spending = sum(r["spending"] or 0 for r in rows)
+    income = sum(r["income"] or 0 for r in rows)
+    total = spending or 1
+    cats = [CategoryTotal(category=r["category"],
+                          total=round(r["spending"] or 0, 2),
+                          share=round((r["spending"] or 0) / total * 100, 1))
+            for r in rows if r["spending"]]
+    cats.sort(key=lambda c: -c.total)
+    return MonthSummary(month=month, spending=round(spending, 2),
+                        income=round(income, 2),
+                        net=round(income - spending, 2), by_category=cats)
 
 
 @app.get("/api/summary/trend", response_model=list[CategoryTrend])
