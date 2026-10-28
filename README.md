@@ -18,6 +18,7 @@ Open http://127.0.0.1:8000 — the UI is served by the same app.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/transactions?limit=100` | List transactions, newest first |
+| `GET` | `/api/transactions/{id}` | Fetch one transaction (404 if missing) |
 | `POST` | `/api/transactions` | Create (`date`, `description`, `amount`, `category`) |
 | `DELETE` | `/api/transactions/{id}` | Delete one |
 | `PUT` | `/api/transactions/{id}` | Update (`date`, `description`, `amount`, `category` — all optional) |

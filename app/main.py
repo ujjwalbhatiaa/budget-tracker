@@ -2,6 +2,7 @@
 
 Endpoints:
     GET    /api/transactions          list (newest first, ?limit=)
+    GET    /api/transactions/{id}     fetch one transaction (404 if missing)
     POST   /api/transactions          create
     DELETE /api/transactions/{id}     delete
     PUT    /api/transactions/{id}     update (partial; any of date, description, amount, category)
@@ -66,6 +67,16 @@ def list_transactions(limit: int = 100):
         (max(limit, 1),),
     ).fetchall()
     return [_row_to_out(r) for r in rows]
+
+
+@app.get("/api/transactions/{txn_id}", response_model=TransactionOut)
+def get_transaction(txn_id: int):
+    db = get_db(DB_PATH)
+    row = db.execute("SELECT * FROM transactions WHERE id = ?",
+                     (txn_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    return _row_to_out(row)
 
 
 @app.post("/api/transactions", response_model=TransactionOut, status_code=201)
