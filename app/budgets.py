@@ -2,6 +2,7 @@
 
 Endpoints:
     GET    /api/budgets              list all caps
+    GET    /api/budgets/{category}   one cap (404 when none set)
     PUT    /api/budgets/{category}   set/update a cap (body: {"monthly_limit": N})
     DELETE /api/budgets/{category}   remove a cap
     GET    /api/budget-status        spend vs cap per category (?month=YYYY-MM,
@@ -43,6 +44,19 @@ def list_budgets():
         BudgetOut(category=r["category"], monthly_limit=r["monthly_limit"])
         for r in rows
     ]
+
+
+@router.get("/api/budgets/{category}", response_model=BudgetOut)
+def get_budget(category: str):
+    db = get_db(DB_PATH)
+    row = db.execute(
+        "SELECT category, monthly_limit FROM budgets WHERE category = ?",
+        (_norm_category(category),),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no budget for category")
+    return BudgetOut(category=row["category"],
+                     monthly_limit=row["monthly_limit"])
 
 
 @router.put("/api/budgets/{category}", response_model=BudgetOut)

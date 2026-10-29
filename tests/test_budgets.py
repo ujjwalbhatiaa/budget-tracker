@@ -38,6 +38,20 @@ def test_set_and_list_budget(client):
     assert budgets == [{"category": "groceries", "monthly_limit": 400}]
 
 
+def test_get_single_budget(client):
+    client.put("/api/budgets/groceries", json={"monthly_limit": 400})
+    client.put("/api/budgets/dining", json={"monthly_limit": 50})
+    r = client.get("/api/budgets/groceries")
+    assert r.status_code == 200
+    assert r.json() == {"category": "groceries", "monthly_limit": 400}
+    # category lookup is normalized, like PUT/DELETE
+    assert client.get("/api/budgets/  Groceries ").json()["monthly_limit"] == 400
+
+
+def test_get_single_budget_missing_is_404(client):
+    assert client.get("/api/budgets/groceries").status_code == 404
+
+
 def test_update_existing_cap(client):
     client.put("/api/budgets/groceries", json={"monthly_limit": 400})
     r = client.put("/api/budgets/groceries", json={"monthly_limit": 550})
