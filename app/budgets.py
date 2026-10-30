@@ -7,6 +7,8 @@ Endpoints:
     DELETE /api/budgets/{category}   remove a cap
     GET    /api/budget-status        spend vs cap per category (?month=YYYY-MM,
                                     defaults to the current month)
+    GET    /api/budget-status/{category}  spend vs cap for one category
+                                    (?month=YYYY-MM, 404 when no cap set)
 
 Register on the main app with: app.include_router(budgets.router)
 """
@@ -115,3 +117,35 @@ def budget_status(month: str | None = None):
             over=s > limit,
         ))
     return sorted(out, key=lambda b: b.category)
+
+
+@router.get("/api/budget-status/{category}", response_model=BudgetStatus)
+def budget_status_for_category(category: str, month: str | None = None):
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    cat = _norm_category(category)
+    db = get_db(DB_PATH)
+    row = db.execute(
+        "SELECT category, monthly_limit FROM budgets WHERE category = ?",
+        (cat,),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no budget for category")
+    spent_row = db.execute(
+        "SELECT SUM(-amount) AS spent FROM transactions"
+        " WHERE category = ? AND substr(date, 1, 7) = ? AND amount < 0",
+        (cat, month),
+    ).fetchone()
+    spent = round(spent_row["spent"] or 0.0, 2)
+    limit = row["monthly_limit"]
+    return BudgetStatus(
+        category=cat,
+        month=month,
+        monthly_limit=limit,
+        spent=spent,
+        remaining=round(limit - spent, 2),
+        pct_used=round(spent / limit * 100, 1),
+        over=spent > limit,
+    )
