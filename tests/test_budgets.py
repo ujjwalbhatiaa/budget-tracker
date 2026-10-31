@@ -106,6 +106,32 @@ def test_budget_status_defaults_to_current_month(client):
     assert rows and rows[0]["month"] == date.today().strftime("%Y-%m")
 
 
+def test_budget_status_over_only_filter(client):
+    _txn(client, -150, "groceries")
+    _txn(client, -60, "dining")
+    client.put("/api/budgets/groceries", json={"monthly_limit": 400})
+    client.put("/api/budgets/dining", json={"monthly_limit": 50})
+    params = {"month": "2026-09"}
+    all_rows = client.get("/api/budget-status", params=params).json()
+    assert [r["category"] for r in all_rows] == ["dining", "groceries"]
+    over_rows = client.get("/api/budget-status",
+                            params={**params, "over_only": True}).json()
+    assert [r["category"] for r in over_rows] == ["dining"]
+    assert over_rows[0]["over"] is True
+    off_rows = client.get("/api/budget-status",
+                           params={**params, "over_only": False}).json()
+    assert len(off_rows) == 2
+
+
+def test_budget_status_over_only_empty_when_nothing_over(client):
+    _txn(client, -10, "groceries")
+    client.put("/api/budgets/groceries", json={"monthly_limit": 400})
+    rows = client.get("/api/budget-status",
+                       params={"month": "2026-09",
+                               "over_only": True}).json()
+    assert rows == []
+
+
 def test_budget_status_rejects_bad_month(client):
     assert client.get("/api/budget-status",
                       params={"month": "2026-13"}).status_code == 422

@@ -6,7 +6,9 @@ Endpoints:
     PUT    /api/budgets/{category}   set/update a cap (body: {"monthly_limit": N})
     DELETE /api/budgets/{category}   remove a cap
     GET    /api/budget-status        spend vs cap per category (?month=YYYY-MM,
-                                    defaults to the current month)
+                                    defaults to the current month;
+                                    ?over_only=true keeps only categories
+                                    that exceeded their cap)
     GET    /api/budget-status/{category}  spend vs cap for one category
                                     (?month=YYYY-MM, 404 when no cap set)
 
@@ -89,7 +91,7 @@ def delete_budget(category: str):
 
 
 @router.get("/api/budget-status", response_model=list[BudgetStatus])
-def budget_status(month: str | None = None):
+def budget_status(month: str | None = None, over_only: bool = False):
     if month is None:
         month = date.today().strftime("%Y-%m")
     if not _MONTH_RE.match(month):
@@ -116,7 +118,10 @@ def budget_status(month: str | None = None):
             pct_used=round(s / limit * 100, 1),
             over=s > limit,
         ))
-    return sorted(out, key=lambda b: b.category)
+    out = sorted(out, key=lambda b: b.category)
+    if over_only:
+        out = [b for b in out if b.over]
+    return out
 
 
 @router.get("/api/budget-status/{category}", response_model=BudgetStatus)
