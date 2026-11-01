@@ -9,6 +9,8 @@ Endpoints:
                                     defaults to the current month;
                                     ?over_only=true keeps only categories
                                     that exceeded their cap)
+    GET    /api/budget-status/totals    aggregate caps/spend across all
+                                    capped categories (?month=YYYY-MM)
     GET    /api/budget-status/{category}  spend vs cap for one category
                                     (?month=YYYY-MM, 404 when no cap set)
 
@@ -24,7 +26,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 
 from .database import get_db
-from .schemas import BudgetIn, BudgetOut, BudgetStatus
+from .schemas import BudgetIn, BudgetOut, BudgetStatus, BudgetTotals
 
 router = APIRouter()
 
@@ -122,6 +124,42 @@ def budget_status(month: str | None = None, over_only: bool = False):
     if over_only:
         out = [b for b in out if b.over]
     return out
+
+
+@router.get("/api/budget-status/totals", response_model=BudgetTotals)
+def budget_status_totals(month: str | None = None):
+    """Aggregate budget-status across every capped category.
+
+    Defined before the /{category} route so "totals" is not captured
+    as a category name. Same month validation and spend math as
+    budget_status; categories with no spending count as spent 0.
+    """
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    db = get_db(DB_PATH)
+    caps = db.execute("SELECT category, monthly_limit FROM budgets").fetchall()
+    spent_rows = db.execute(
+        "SELECT category, SUM(-amount) AS spent FROM transactions"
+        " WHERE substr(date, 1, 7) = ? AND amount < 0 GROUP BY category",
+        (month,),
+    ).fetchall()
+    spent = {r["category"]: (r["spent"] or 0.0) for r in spent_rows}
+    total_limit = round(sum(c["monthly_limit"] for c in caps), 2)
+    total_spent = round(sum(spent.get(c["category"], 0.0) for c in caps), 2)
+    over_count = sum(
+        1 for c in caps if spent.get(c["category"], 0.0) > c["monthly_limit"])
+    return BudgetTotals(
+        month=month,
+        categories=len(caps),
+        total_limit=total_limit,
+        total_spent=total_spent,
+        total_remaining=round(total_limit - total_spent, 2),
+        pct_used=round(total_spent / total_limit * 100, 1)
+        if total_limit else 0.0,
+        over_count=over_count,
+    )
 
 
 @router.get("/api/budget-status/{category}", response_model=BudgetStatus)

@@ -107,6 +107,18 @@ class BudgetStatus(BaseModel):
     over: bool
 
 
+class BudgetTotals(BaseModel):
+    """Aggregate spend vs caps across all capped categories in one month."""
+
+    month: str  # YYYY-MM
+    categories: int  # how many categories have a cap set
+    total_limit: float
+    total_spent: float
+    total_remaining: float
+    pct_used: float
+    over_count: int  # how many categories exceeded their cap
+
+
 class CategoryTrend(BaseModel):
     """One month of a category's spending trend."""
 
