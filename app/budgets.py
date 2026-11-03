@@ -11,6 +11,9 @@ Endpoints:
                                     that exceeded their cap)
     GET    /api/budget-status/totals    aggregate caps/spend across all
                                     capped categories (?month=YYYY-MM)
+    GET    /api/budget-status/alerts    categories at or above a usage
+                                    threshold (?month=YYYY-MM,
+                                    ?threshold=80, most-used first)
     GET    /api/budget-status/{category}  spend vs cap for one category
                                     (?month=YYYY-MM, 404 when no cap set)
 
@@ -23,7 +26,7 @@ import os
 import re
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from .database import get_db
 from .schemas import BudgetIn, BudgetOut, BudgetStatus, BudgetTotals
@@ -160,6 +163,22 @@ def budget_status_totals(month: str | None = None):
         if total_limit else 0.0,
         over_count=over_count,
     )
+
+
+@router.get("/api/budget-status/alerts", response_model=list[BudgetStatus])
+def budget_status_alerts(
+    month: str | None = None,
+    threshold: float = Query(default=80, ge=0, le=100),
+):
+    """Categories at or above `threshold` percent of their cap, most-used first.
+
+    Defined before the /{category} route so "alerts" is not captured as a
+    category name. Reuses budget_status's month validation and spend math,
+    so over-cap categories (pct_used > 100) always alert at any threshold.
+    """
+    rows = budget_status(month=month)
+    alerted = [b for b in rows if b.pct_used >= threshold]
+    return sorted(alerted, key=lambda b: b.pct_used, reverse=True)
 
 
 @router.get("/api/budget-status/{category}", response_model=BudgetStatus)
