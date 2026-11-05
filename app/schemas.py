@@ -119,6 +119,20 @@ class BudgetTotals(BaseModel):
     over_count: int  # how many categories exceeded their cap
 
 
+class BudgetCompare(BaseModel):
+    """Spend in one month vs a previous month, per capped category."""
+
+    category: str
+    month: str  # YYYY-MM (current month)
+    prev_month: str  # YYYY-MM (comparison month)
+    monthly_limit: float
+    spent: float
+    prev_spent: float
+    delta_spent: float  # spent - prev_spent (positive = spent more)
+    pct_used: float
+    prev_pct_used: float
+
+
 class CategoryTrend(BaseModel):
     """One month of a category's spending trend."""
 

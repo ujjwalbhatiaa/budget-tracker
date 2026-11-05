@@ -16,6 +16,8 @@ Endpoints:
                                     ?threshold=80, most-used first)
     GET    /api/budget-status/{category}  spend vs cap for one category
                                     (?month=YYYY-MM, 404 when no cap set)
+    GET    /api/budget-status/{category}/history  same, over the last N
+                                    months (?month=YYYY-MM, ?months=6)
 
 Register on the main app with: app.include_router(budgets.router)
 """
@@ -29,7 +31,13 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query
 
 from .database import get_db
-from .schemas import BudgetIn, BudgetOut, BudgetStatus, BudgetTotals
+from .schemas import (
+    BudgetCompare,
+    BudgetIn,
+    BudgetOut,
+    BudgetStatus,
+    BudgetTotals,
+)
 
 router = APIRouter()
 
@@ -179,6 +187,88 @@ def budget_status_alerts(
     rows = budget_status(month=month)
     alerted = [b for b in rows if b.pct_used >= threshold]
     return sorted(alerted, key=lambda b: b.pct_used, reverse=True)
+
+
+@router.get("/api/budget-status/compare", response_model=list[BudgetCompare])
+def budget_status_compare(
+    month: str | None = None,
+    prev_month: str | None = None,
+):
+    """Per-category spend in `month` vs `prev_month` (defaults to the
+    calendar month before `month`, or before the current month).
+
+    Defined before the /{category} route so "compare" is not captured
+    as a category name. Reuses budget_status rows for both months, so
+    month validation and spend math stay identical; categories with a
+    cap but no spending in either month appear with zeros.
+    """
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    if prev_month is None:
+        year, mon = int(month[:4]), int(month[5:7])
+        if mon == 1:
+            year, mon = year - 1, 12
+        else:
+            mon -= 1
+        prev_month = f"{year:04d}-{mon:02d}"
+    if not _MONTH_RE.match(prev_month):
+        raise HTTPException(status_code=422, detail="prev_month must be YYYY-MM")
+    current = {b.category: b for b in budget_status(month=month)}
+    previous = {b.category: b for b in budget_status(month=prev_month)}
+    out = []
+    for cat in sorted(set(current) | set(previous)):
+        cur = current.get(cat)
+        prev = previous.get(cat)
+        limit = (cur or prev).monthly_limit
+        spent = cur.spent if cur else 0.0
+        prev_spent = prev.spent if prev else 0.0
+        out.append(BudgetCompare(
+            category=cat,
+            month=month,
+            prev_month=prev_month,
+            monthly_limit=limit,
+            spent=spent,
+            prev_spent=prev_spent,
+            delta_spent=round(spent - prev_spent, 2),
+            pct_used=cur.pct_used if cur else 0.0,
+            prev_pct_used=prev.pct_used if prev else 0.0,
+        ))
+    return out
+
+
+@router.get("/api/budget-status/{category}/history",
+            response_model=list[BudgetStatus])
+def budget_status_history(
+    category: str,
+    month: str | None = None,
+    months: int = Query(default=6, ge=1, le=12),
+):
+    """Spend vs cap for one category over the last `months` months,
+    ending at `month` (defaults to the current month), oldest first.
+
+    Defined before the /{category} route so the extra path segment is
+    never captured as a category. Reuses budget_status_for_category
+    for each month, so validation and spend math stay identical; a
+    month with no spending appears with spent 0. 404 when no cap set.
+    """
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    # 404 early, before building the month list.
+    budget_status_for_category(category, month=month)
+    year, mon = int(month[:4]), int(month[5:7])
+    seq = []
+    for _ in range(months):
+        seq.append(f"{year:04d}-{mon:02d}")
+        if mon == 1:
+            year, mon = year - 1, 12
+        else:
+            mon -= 1
+    seq.reverse()
+    return [budget_status_for_category(category, month=m) for m in seq]
 
 
 @router.get("/api/budget-status/{category}", response_model=BudgetStatus)
