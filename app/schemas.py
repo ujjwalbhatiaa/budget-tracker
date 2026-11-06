@@ -133,6 +133,21 @@ class BudgetCompare(BaseModel):
     prev_pct_used: float
 
 
+class BudgetForecast(BaseModel):
+    """Projected month-end spend for one capped category, from its
+    daily run-rate so far this month."""
+
+    category: str
+    month: str  # YYYY-MM
+    monthly_limit: float
+    spent: float  # spent so far this month
+    days_elapsed: int  # days of the month already past (incl. today)
+    days_in_month: int
+    projected_spent: float  # spent / days_elapsed * days_in_month
+    projected_pct_used: float  # projected_spent / monthly_limit * 100
+    projected_over: bool  # projected_spent > monthly_limit
+
+
 class CategoryTrend(BaseModel):
     """One month of a category's spending trend."""
 

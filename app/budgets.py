@@ -21,12 +21,16 @@ Endpoints:
     GET    /api/budget-status/rollup  aggregate totals for each of the
                                     last N months (?month=YYYY-MM,
                                     ?months=6, oldest first)
+    GET    /api/budget-status/forecast  projected month-end spend per
+                                    capped category from the daily
+                                    run-rate so far (?month=YYYY-MM)
 
 Register on the main app with: app.include_router(budgets.router)
 """
 
 from __future__ import annotations
 
+import calendar
 import os
 import re
 from datetime import date
@@ -36,6 +40,7 @@ from fastapi import APIRouter, HTTPException, Query
 from .database import get_db
 from .schemas import (
     BudgetCompare,
+    BudgetForecast,
     BudgetIn,
     BudgetOut,
     BudgetStatus,
@@ -268,6 +273,50 @@ def budget_status_rollup(
             mon -= 1
     seq.reverse()
     return [budget_status_totals(month=m) for m in seq]
+
+
+@router.get("/api/budget-status/forecast", response_model=list[BudgetForecast])
+def budget_status_forecast(month: str | None = None):
+    """Projected month-end spend per capped category, from the daily
+    run-rate so far: spent / days_elapsed * days_in_month.
+
+    Defined before the /{category} route so "forecast" is not captured
+    as a category name. Reuses budget_status rows, so month validation
+    and spend math stay identical. For a past month the projection
+    equals what was actually spent (days_elapsed == days_in_month);
+    for a future month nothing is spent yet, so the projection is 0.
+    """
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    year, mon = int(month[:4]), int(month[5:7])
+    days_in_month = calendar.monthrange(year, mon)[1]
+    today = date.today()
+    if (year, mon) < (today.year, today.month):
+        days_elapsed = days_in_month
+    elif (year, mon) > (today.year, today.month):
+        days_elapsed = 0
+    else:
+        days_elapsed = today.day
+    out = []
+    for b in budget_status(month=month):
+        if days_elapsed == 0:
+            projected = 0.0
+        else:
+            projected = round(b.spent / days_elapsed * days_in_month, 2)
+        out.append(BudgetForecast(
+            category=b.category,
+            month=month,
+            monthly_limit=b.monthly_limit,
+            spent=b.spent,
+            days_elapsed=days_elapsed,
+            days_in_month=days_in_month,
+            projected_spent=projected,
+            projected_pct_used=round(projected / b.monthly_limit * 100, 1),
+            projected_over=projected > b.monthly_limit,
+        ))
+    return out
 
 
 @router.get("/api/budget-status/{category}/history",
