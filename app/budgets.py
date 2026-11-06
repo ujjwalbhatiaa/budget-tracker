@@ -18,6 +18,9 @@ Endpoints:
                                     (?month=YYYY-MM, 404 when no cap set)
     GET    /api/budget-status/{category}/history  same, over the last N
                                     months (?month=YYYY-MM, ?months=6)
+    GET    /api/budget-status/rollup  aggregate totals for each of the
+                                    last N months (?month=YYYY-MM,
+                                    ?months=6, oldest first)
 
 Register on the main app with: app.include_router(budgets.router)
 """
@@ -236,6 +239,35 @@ def budget_status_compare(
             prev_pct_used=prev.pct_used if prev else 0.0,
         ))
     return out
+
+
+@router.get("/api/budget-status/rollup", response_model=list[BudgetTotals])
+def budget_status_rollup(
+    month: str | None = None,
+    months: int = Query(default=6, ge=1, le=12),
+):
+    """Aggregate totals for each of the last `months` months ending at
+    `month` (defaults to the current month), oldest first.
+
+    Defined before the /{category} route so "rollup" is not captured
+    as a category name. Reuses budget_status_totals for each month,
+    so month validation and spend math stay identical; a month with
+    no caps or no spending appears with zeros.
+    """
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+    if not _MONTH_RE.match(month):
+        raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+    year, mon = int(month[:4]), int(month[5:7])
+    seq = []
+    for _ in range(months):
+        seq.append(f"{year:04d}-{mon:02d}")
+        if mon == 1:
+            year, mon = year - 1, 12
+        else:
+            mon -= 1
+    seq.reverse()
+    return [budget_status_totals(month=m) for m in seq]
 
 
 @router.get("/api/budget-status/{category}/history",
